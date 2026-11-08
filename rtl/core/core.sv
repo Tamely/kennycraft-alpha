@@ -9,7 +9,7 @@
 // instruction through the states of the Tai page, GPU Core, SIMD state
 // machine:
 //
-//   IF    send PC to the instruction BRAM                          1 cycle
+//   IF    send PC to the instruction BRAM (reset only, see below)  1 cycle
 //   ID    instruction arrives, decode once, read every lane's registers
 //   EX    every lane's ALU, comparator, address generator, multiply;
 //         lane control updates the mask                             1
@@ -20,6 +20,13 @@
 //         order; stores retire on the last lane's access           N + slave wait
 //   WB    every lane writes rd together (the last load lane's data
 //         arrives here), update PC                                  1
+//
+// Fetch overlap. next_pc is registered in EX, so the cycle that retires an
+// instruction (WB, or a store's last MEM cycle) already drives next_pc to the
+// instruction BRAM and the FSM goes straight to ID: IF runs only after reset.
+// That is one cycle less for every instruction (ALU 3, MUL 4, an 8-lane load
+// 11). Register writes land at the end of WB and the next ID reads the
+// register file after them, so nothing else changes.
 //
 // Shared state here: PC, fetch, decode, FSM, the LANES-bit active mask (reset
 // 1) and the scalar-lane mux. rtl/core/lane.sv is one lane's datapath and
@@ -53,7 +60,7 @@
 // QRCP (D22, HAS_QRCP = 1; illegal otherwise) runs rtl/core/qrcp.sv in every
 // lane: the unit latches its rs1 in EX, QR steps it through qr_ph 0..3 and
 // latches its result into res at qr_ph 4, and WB writes rd in active lanes
-// (rd = x0 never). Fixed latency: 9 cycles per QRCP (IF, ID, EX, 5 x QR, WB).
+// (rd = x0 never). Fixed latency: 8 cycles per QRCP (ID, EX, 5 x QR, WB; the fetch overlaps WB).
 //
 // Errors (Tai_2 sections 1 and 2). An illegal instruction or a fetch outside
 // instruction memory (caught in ID), a taken branch, JAL, JALR, or a DIF or
@@ -436,7 +443,7 @@ module core
                 S_MEM: begin
                     if (lsu_done) begin
                         if (ex_is_store) begin
-                            state <= S_IF;
+                            state <= S_ID;      // next_pc was fetched this cycle
                             pc    <= next_pc;
                         end else begin
                             state <= S_WB;
@@ -444,7 +451,7 @@ module core
                     end
                 end
                 S_WB: begin
-                    state <= S_IF;
+                    state <= S_ID;              // next_pc was fetched this cycle
                     pc    <= next_pc;
                 end
                 default: state <= S_HALT;
@@ -452,7 +459,10 @@ module core
         end
     end
 
-    assign imem_addr = pc;
+    // The retiring cycle fetches next_pc (fetch overlap, above); every other
+    // state keeps the current instruction at the BRAM output.
+    assign imem_addr = ((state == S_WB) || ((state == S_MEM) && lsu_done && ex_is_store))
+                     ? next_pc : pc;
     assign halted    = (state == S_HALT);
     assign err_pc    = pc;
 

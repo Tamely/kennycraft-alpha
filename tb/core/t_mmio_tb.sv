@@ -56,14 +56,14 @@ module t_mmio_tb;
         end
         expect32("FRAME_COUNT", dmem_rd(RES + 16), 32'h1234_5678);
         expect32("VSYNC", dmem_rd(RES + 20), 32'h1);
-        expect32("CYCLES delta (one LW)", dmem_rd(RES + 24), 32'd5);
+        expect32("CYCLES delta (one LW)", dmem_rd(RES + 24), 32'd4);   // ID EX MEM WB (fetch overlap)
         expect32("UART_STATUS idle", dmem_rd(RES + 28), 32'h0);
         expect32("UART_RX empty", dmem_rd(RES + 32), 32'h0);
         expect32("UART_STATUS TX busy", dmem_rd(RES + 36), 32'h2);
         expect32("SLOT_VALID via ddr port", dmem_rd(RES + 40), 32'hBEEF);
         expect32("DDR_STATUS via ddr port", dmem_rd(RES + 44), 32'h1);
         expect32("CHUNK_CMD stall cycles", ddr_stalled_cycles, STALL + 1);
-        expect32("CHUNK_CMD time (LW + SW + stall)", dmem_rd(RES + 48), 32'(5 + 4 + STALL + 1));
+        expect32("CHUNK_CMD time (LW + SW + stall)", dmem_rd(RES + 48), 32'(4 + 3 + STALL + 1));   // LW 4, SW 3 (fetch overlap)
         expect32("CHUNK_CMD value", ddr_regs[1], 32'h0000_0302);
         expect32("WIN_ORIGIN value", ddr_regs[4], 32'h0000_1020);
         expect32("fb LW after SW+SB", dmem_rd(RES + 52), 32'h7733_2211);

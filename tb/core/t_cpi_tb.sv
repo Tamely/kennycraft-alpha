@@ -28,12 +28,14 @@ module t_cpi_tb;
         endcase
     endfunction
 
+    // The core fetches the next instruction in the retiring cycle (fetch
+    // overlap, core.sv), so there is no IF cycle per instruction.
     function automatic int expected_cpi(input int k);
         case (k)
-            5, 6, 11, 12, 15, 16: return 5;
-            17, 20:               return 8;   // four byte reads
-            19:                   return 7;   // four byte writes
-            default:              return 4;
+            5, 6, 11, 12, 15, 16: return 4;
+            17, 20:               return 7;   // four byte reads
+            19:                   return 6;   // four byte writes
+            default:              return 3;
         endcase
     endfunction
 

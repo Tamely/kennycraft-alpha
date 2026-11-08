@@ -4,13 +4,14 @@
 // program's own XOR check (s9 = 0), and QRCP under the mask 0xA5 (inactive
 // lanes keep a1 = 0x5A5A0000 | lane). Monitors: no register file ever
 // writes x0 (QRCP x0), and every QRCP retires exactly QRCP_CYCLES after the
-// instruction before it (fixed latency: IF, ID, EX, 5 x QR, WB).
+// instruction before it (fixed latency: ID, EX, 5 x QR, WB; the core fetches
+// during the previous instruction's retiring cycle).
 module t_qrcp_tb;
     parameter string IMEM_HEX = "";
     parameter string DMEM_HEX = "";
     `include "soc_harness.svh"
 
-    localparam int QRCP_CYCLES = 9;
+    localparam int QRCP_CYCLES = 8;
     localparam int NQRCP       = 9;   // QRCP instructions in t_qrcp.S
 
     // fixed.c qrcp() of qr_in in t_qrcp.S, [row][lane]
