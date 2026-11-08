@@ -87,29 +87,31 @@ typedef struct {
     q16      fog1[3];   // fog_d - 1: fog level n when fog1[n-1] < t
 } kc_kframe;
 
-// One ray: same VSET fields as ray_setup and the same pixel as kc_shade_pixel.
+// One axis of ray_setup: tMax and tDelta for direction component d, origin fraction frac << 15.
+typedef struct { uint32_t tmax, td; } kc_axis;
+static inline __attribute__((always_inline)) kc_axis axis_setup(uint32_t frac, q16 d) {
+    int32_t  m  = d >> 31;                            // all ones when stepping negative
+    uint32_t p  = ~(uint32_t)m;                       // all ones when stepping positive
+    q16      ad = (d ^ m) - m;                        // |d|
+    kc_axis  a;
+    // tDelta = 1/|d|, 0x7FFF_FFFF for |d| = 0. qrcp(0) is Q16_BIG = 0x4000_0000 (fixed.c,
+    // and QRCP is bit-exact with it), so OR-ing in 0x3FFF_FFFF gives exactly that.
+    a.td = (uint32_t)qrcp(ad) | (lane_mask_of(ad == 0) >> 2);
+    // Distance to the first boundary << 15: frac for d < 0, 1 - frac for d >= 0.
+    // (x ^ 0x7FFF_FFFF) + 1 = 2^31 - x, i.e. (1.0 - frac) << 15.
+    uint32_t fr = (frac ^ (p >> 1)) - p;
+    // tMax = qmul(fr, td) for fr in [0, 1.0] and td in [0, 0x7FFF_FFFF]: one MULHU.
+    a.tmax = mulhu32(fr, a.td << 1);
+    return a;
+}
+
+// One ray: same VSET fields as ray_setup and the same pixel as kc_shade_pixel. The y axis
+// comes in precomputed (ay, ysign = y step sign << 1): it is constant along a block row.
 static inline __attribute__((always_inline))
-uint8_t shade_ray(const kc_kframe *k, q16 dx, q16 dy, q16 dz, int32_t sky) {
-    q16 dv[3] = { dx, dy, dz };
-    uint32_t f[8];
-    uint32_t signs = 0;
-    for (int i = 0; i < 3; i++) {                     // unrolled; uniform trip count
-        int32_t  m  = dv[i] >> 31;                    // all ones when stepping negative
-        uint32_t p  = ~(uint32_t)m;                   // all ones when stepping positive
-        q16      ad = (dv[i] ^ m) - m;                // |d|
-        // tDelta = 1/|d|, 0x7FFF_FFFF for |d| = 0. qrcp(0) is Q16_BIG = 0x4000_0000 (fixed.c,
-        // and QRCP is bit-exact with it), so OR-ing in 0x3FFF_FFFF gives exactly that.
-        uint32_t td = (uint32_t)qrcp(ad) | (lane_mask_of(ad == 0) >> 2);
-        // Distance to the first boundary << 15: frac for d < 0, 1 - frac for d >= 0.
-        // (x ^ 0x7FFF_FFFF) + 1 = 2^31 - x, i.e. (1.0 - frac) << 15.
-        uint32_t fr = (k->frac[i] ^ (p >> 1)) - p;
-        // tMax = qmul(fr, td) for fr in [0, 1.0] and td in [0, 0x7FFF_FFFF]: one MULHU.
-        f[1 + i] = mulhu32(fr, td << 1);
-        f[4 + i] = td;
-        signs |= ((uint32_t)dv[i] >> 31) << i;
-    }
-    f[0] = k->cell;
-    f[7] = signs;
+uint8_t shade_ray(const kc_kframe *k, q16 dx, kc_axis ay, uint32_t ysign, q16 dz, int32_t sky) {
+    kc_axis ax = axis_setup(k->frac[0], dx), az = axis_setup(k->frac[2], dz);
+    uint32_t f[8] = { k->cell, ax.tmax, ay.tmax, az.tmax, ax.td, ay.td, az.td,
+                      ((uint32_t)dx >> 31) | ysign | (((uint32_t)dz >> 31) << 2) };
 
     uint32_t res;
     q16 t;
@@ -157,7 +159,7 @@ static inline __attribute__((always_inline)) void render_lane(int32_t lane) {
     q16 d0[3], dr[3], du[3];
     for (int i = 0; i < 3; i++) {
         d0[i] = c->forward[i] + ((c->right_step[i] * sx) >> 1) - ((c->up_step[i] * sy) >> 1);
-        dr[i] = c->right_step[i] * 4;
+        dr[i] = c->right_step[i] * 4;                 // dr[1] = 0: unused (no roll, see below)
         du[i] = c->up_step[i] * 2;
     }
 
@@ -167,10 +169,14 @@ static inline __attribute__((always_inline)) void render_lane(int32_t lane) {
         int32_t sky_i = sky_acc >> 16;
         sky_i = sel(sky_i > 15, 15, sky_i);
         int32_t sky = (COLOR_SKY << 4) | sky_i;
-        q16 dx = d0[0], dy = d0[1], dz = d0[2];
+        // The camera never rolls (game.c view_vectors: right.y = 0), so right_step[1] = 0 and
+        // the y component, its tDelta, tMax and step sign are the same for the whole block row.
+        kc_axis ay = axis_setup(k.frac[1], d0[1]);
+        uint32_t ysign = ((uint32_t)d0[1] >> 31) << 1;
+        q16 dx = d0[0], dz = d0[2];
         for (uint32_t i = row, end = row + (uint32_t)W; i < end; i += 4) {
-            hal_fb_put(i, shade_ray(&k, dx, dy, dz, sky));
-            dx += dr[0]; dy += dr[1]; dz += dr[2];
+            hal_fb_put(i, shade_ray(&k, dx, ay, ysign, dz, sky));
+            dx += dr[0]; dz += dr[2];
         }
         d0[0] -= du[0]; d0[1] -= du[1]; d0[2] -= du[2];
         row += 2 * FB_STRIDE;

@@ -46,7 +46,7 @@
 typedef struct {
     int32_t origin[3];      // ABSOLUTE world block coordinates (kernels subtract the corner)
     int32_t forward[3];
-    int32_t right_step[3];
+    int32_t right_step[3];  // right_step[1] must be 0 (no camera roll): the kernel hoists y per row
     int32_t up_step[3];
 } kc_camera;
 

@@ -63,10 +63,10 @@ Every chip target also runs `tools/stack_check.sh`: the worst-case stack depth o
 - Software DDA loop: 52 RV32I instructions per step.
 - 160×120 with a 16-step cap is about 207k steps per frame, roughly 11M instructions. At about 4 CPI on a 50 MHz multi-cycle core that's ~1 fps, which matches the Stage 0 plan.
 - The default cap is 64 (`-DKC_MAX_STEPS`). At that cap a frame is 302k steps.
-- Stage 2 kernel (8 lanes, VTRACE, QRCP), cycles per 8-pixel pass outside the VTRACE walk: 361 (was 1,557 before the
+- Stage 2 kernel (8 lanes, VTRACE, QRCP), cycles per 8-pixel pass outside the VTRACE walk: 279 (was 1,557 before the
   register-resident kernel). The LSU is lane-serial and there is no cache, so every 8-lane load costs ~12 cycles; the
   old kernel did 44 loads and 21 stores per pass (camera reloads, the ray and hit built on the stack, call spills),
-  the new one 1 LBU and 1 SB. With the walk measured on the golden poses that is ~1.0M instead of ~3.9M cycles per
+  the new one 1 LBU and 1 SB, and 2 QRCP instead of 3 (y is constant along a row). With the walk measured on the golden poses that is ~1.0M instead of ~3.9M cycles per
   160x120 frame (~45 instead of ~12.5 fps of kernel time at 50 MHz; 11.9 fps was measured on the board before).
 
 ## Memory budget (data memory, 32 KB)
