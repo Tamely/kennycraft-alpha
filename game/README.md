@@ -66,8 +66,10 @@ Every chip target also runs `tools/stack_check.sh`: the worst-case stack depth o
 - Stage 2 kernel (8 lanes, VTRACE, QRCP), cycles per 8-pixel pass outside the VTRACE walk: 279 (was 1,557 before the
   register-resident kernel). The LSU is lane-serial and there is no cache, so every 8-lane load costs ~12 cycles; the
   old kernel did 44 loads and 21 stores per pass (camera reloads, the ray and hit built on the stack, call spills),
-  the new one 1 LBU and 1 SB, and 2 QRCP instead of 3 (y is constant along a row). With the walk measured on the golden poses that is ~1.0M instead of ~3.9M cycles per
-  160x120 frame (~45 instead of ~12.5 fps of kernel time at 50 MHz; 11.9 fps was measured on the board before).
+  the new one 1 LBU and 1 SB, and 2 QRCP instead of 3 (y is constant along a row).
+- Stage 2 frame, measured (`make tb-top-t_top_frame TOP_ELF=kc_chip8_vtrace TOP_SWAPS=12`, CYCLES between FB_SWAPs):
+  708,862 cycles = 70.5 fps at 50 MHz, with the core's fetch overlap and the 3-cycle VTRACE step. Before this kernel it
+  was 4,005,215 cycles = 12.5 fps (11.9 fps measured on the board).
 
 ## Memory budget (data memory, 32 KB)
 
