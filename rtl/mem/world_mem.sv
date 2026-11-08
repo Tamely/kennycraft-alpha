@@ -9,7 +9,8 @@
 //   port B  VTRACE only.
 //
 // VTRACE (WORLD_LATENCY = 2). Copy n serves lanes 4n..4n+3. vt_paddr is held
-// for two cycles; vt_phase alternates 0, 1 while vt_busy is high. In phase 0
+// for two cycles; vt_phase (from vtrace: the index of its WAIT cycle) is 0
+// in the first and 1 in the second, and 0 in the CHECK cycle. In phase 0
 // ports A and B of copy n read lanes 4n and 4n+1, in phase 1 lanes 4n+2 and
 // 4n+3. The phase-0 data is captured on the phase-1 edge, so every lane's
 // vt_rdata is valid after the second edge (lanes 4n+2, 4n+3 straight from the
@@ -24,6 +25,7 @@ module world_mem #(
 
     // VTRACE (physical addresses from world_remap)
     input  logic        vt_busy,
+    input  logic        vt_phase,
     input  logic [16:0] vt_paddr [LANES],
     output logic [3:0]  vt_rdata [LANES],
 
@@ -42,10 +44,6 @@ module world_mem #(
     output logic [3:0]  a_rdata
 );
     localparam int COPIES = LANES / 4;
-
-    logic vt_phase = 1'b0;
-
-    always_ff @(posedge clk) vt_phase <= vt_busy && !vt_phase;
 
     logic [16:0] a_addr_w;
     logic        a_we;

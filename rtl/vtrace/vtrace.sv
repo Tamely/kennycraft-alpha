@@ -9,20 +9,22 @@
 //
 // One step (wiki "One step", ties as written there: x only on a strict
 // minimum, then y if tMaxY < tMaxZ, else z; tMax compares are signed):
-//   STEP   move the cell one block on the chosen axis, tMax += tDelta
-//          (saturating at 0x7FFF_FFFF), record axis, sign, t = old tMax and
-//          the step count. world_addr follows the cell, so it is held until
-//          the next STEP.
-//   WAIT   WORLD_LATENCY cycles with world_addr held.
+//   step   (an edge, not a state) move the cell one block on the chosen
+//          axis, tMax += tDelta (saturating at 0x7FFF_FFFF), record axis,
+//          sign, t = old tMax and the step count. world_addr follows the
+//          cell, so it is held until the next step.
+//   WAIT   WORLD_LATENCY cycles with world_addr held. world_phase is the
+//          index of the WAIT cycle (0, 1): world_mem reads lanes 4n, 4n + 1
+//          in phase 0 and 4n + 2, 4n + 3 in phase 1.
 //   CHECK  world_data is valid: outside 0..63 / 0..31 / 0..63 finishes the
 //          lane with hit = 0, a non-air block finishes it with hit = 1 and
 //          the block type. The walk ends when every lane is finished or
-//          max_steps steps have been taken.
-// That is 1 + WORLD_LATENCY + 1 = 4 cycles per step with two world copies
-// (D17). The first STEP happens on the start edge, so the first cycle with
-// busy high is the first world_addr cycle; with an even step length every
-// later address also starts in an even busy cycle (world_mem phase 0: lanes
-// 4n and 4n + 1 read first, 4n + 2 and 4n + 3 second).
+//          max_steps steps have been taken; otherwise the lanes still live
+//          take their next step on the CHECK edge itself.
+// That is WORLD_LATENCY + 1 = 3 cycles per step with two world copies
+// (D17), the world memory busy in both WAIT cycles. The first step happens
+// on the start edge, so the first cycle with busy high is the first
+// world_addr cycle.
 //
 // The start cell is never tested. start with max_steps = 0 or an empty
 // lane_mask raises done the next cycle and changes nothing. Lanes outside
@@ -52,11 +54,12 @@ module vtrace #(parameter int LANES = 8, parameter int WORLD_LATENCY = 2) (
   // cycles and world_data is valid WORLD_LATENCY cycles after it (2 with two
   // world copies, D17; 1 with four)
   output logic [16:0]      world_addr [LANES],
+  output logic             world_phase,  // WAIT cycle index (world_mem two-phase read)
   input  logic [3:0]       world_data [LANES]
 );
   localparam int WL_W = (WORLD_LATENCY > 1) ? $clog2(WORLD_LATENCY) : 1;
 
-  typedef enum logic [1:0] { S_IDLE, S_WAIT, S_CHECK, S_STEP } state_t;
+  typedef enum logic [1:0] { S_IDLE, S_WAIT, S_CHECK } state_t;
 
   state_t           state;
   logic [WL_W-1:0]  wait_cnt;
@@ -68,11 +71,13 @@ module vtrace #(parameter int LANES = 8, parameter int WORLD_LATENCY = 2) (
   wire launch   = (state == S_IDLE) && start && (max_steps != 8'd0) && (lane_mask != '0);
   wire do_check = (state == S_CHECK);
   wire finish   = do_check && ((live_next == '0) || (step_cnt == cap));
-  // lanes that take a step on this edge, and the step number they record
-  wire [LANES-1:0] stepping = launch ? lane_mask : (state == S_STEP) ? live : '0;
+  // lanes that take a step on this edge, and the step number they record:
+  // the start edge, or a CHECK that does not finish the walk
+  wire [LANES-1:0] stepping = launch ? lane_mask : (do_check && !finish) ? live_next : '0;
   wire [7:0]       step_num = launch ? 8'd1 : step_cnt + 8'd1;
 
-  assign busy = (state != S_IDLE);
+  assign busy        = (state != S_IDLE);
+  assign world_phase = (state == S_WAIT) && (wait_cnt != '0);
 
   always_ff @(posedge clk) begin
     if (rst) begin
@@ -105,14 +110,12 @@ module vtrace #(parameter int LANES = 8, parameter int WORLD_LATENCY = 2) (
             done  <= 1'b1;
             state <= S_IDLE;
           end else begin
-            state <= S_STEP;
+            step_cnt <= step_num;     // the live lanes step on this edge
+            wait_cnt <= '0;
+            state    <= S_WAIT;
           end
         end
-        S_STEP: begin
-          step_cnt <= step_num;
-          wait_cnt <= '0;
-          state    <= S_WAIT;
-        end
+        default: state <= S_IDLE;
       endcase
     end
   end

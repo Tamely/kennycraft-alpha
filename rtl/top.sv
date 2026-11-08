@@ -170,6 +170,7 @@ module top #(
     // two-phase sharing of each copy's ports (D17). Lanes the core does not
     // have read address 0.
     logic        vt_busy;
+    logic        vt_phase;      // vtrace WAIT cycle index: world_mem's read phase
     logic [16:0] vt_addr       [VT_LANES];
     logic [16:0] vt_paddr      [VT_LANES];
     logic [3:0]  vt_rdata_phys [VT_LANES];
@@ -185,7 +186,7 @@ module top #(
             .cfg_data(vt_cfg_data),
             .start(vt_start), .max_steps(vt_max_steps), .busy(vt_busy), .done(vt_done),
             .result(vt_result), .hit_cell(vt_hit_cell), .t_hit(vt_t_hit),
-            .world_addr(world_addr_l), .world_data(world_data_l)
+            .world_addr(world_addr_l), .world_phase(vt_phase), .world_data(world_data_l)
         );
 
         always_comb begin
@@ -196,8 +197,9 @@ module top #(
             end
         end
     end else begin : g_no_vtrace
-        assign vt_busy = 1'b0;
-        assign vt_done = 1'b0;
+        assign vt_busy  = 1'b0;
+        assign vt_phase = 1'b0;
+        assign vt_done  = 1'b0;
         always_comb begin
             for (int l = 0; l < VT_LANES; l++) vt_addr[l] = '0;
             for (int l = 0; l < LANES; l++) begin
@@ -219,7 +221,7 @@ module top #(
     // removes it (Stage 0 and 1 builds).
     world_mem #(.LANES(VT_LANES)) u_world (
         .clk(clk_core),
-        .vt_busy, .vt_paddr, .vt_rdata(vt_rdata_phys),
+        .vt_busy, .vt_phase, .vt_paddr, .vt_rdata(vt_rdata_phys),
         .core_req(world_req), .core_we(world_we), .core_paddr,
         .core_wdata(world_wdata[3:0]),
         .eng_we, .eng_addr, .eng_wdata,

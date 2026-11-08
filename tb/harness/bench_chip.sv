@@ -259,7 +259,7 @@ module bench_chip #(
 
     world_mem #(.LANES(VT_LANES)) u_world (
         .clk(clk_core),
-        .vt_busy, .vt_paddr, .vt_rdata(vt_rdata_phys),
+        .vt_busy, .vt_phase(1'b0), .vt_paddr, .vt_rdata(vt_rdata_phys),
         .core_req(world_req), .core_we(world_we), .core_paddr,
         .core_wdata(world_wdata[3:0]),
         .eng_we, .eng_addr, .eng_wdata,
