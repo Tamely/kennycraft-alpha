@@ -16,7 +16,8 @@ extern const uint8_t kc_face_color[16 * 3];
 
 // Render the whole frame from KC_CAM / KC_RP into the back framebuffer.
 // Kernel: call with all lanes active (mask_all(); kc_render_frame(); mask_set(1);).
-// Walks the screen in 8x8 tiles; each pass of the 8 lanes shades a 4x2 block (D15).
+// Each pass of the 8 lanes shades a 4x2 block (D15); blocks go in raster order (no cache, so
+// tiles bought nothing). Per frame state stays in registers: see the cost model in render.c.
 void kc_render_frame(void);
 
 // Shade one pixel (exposed for tests and the single-pixel debug path).

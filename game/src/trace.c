@@ -75,16 +75,12 @@ void vtrace_ref(const kc_ray *r, int32_t max_steps, kc_hit *h) {
 }
 
 #if KC_VTRACE
-// Ray unit, custom-1 (0x2B). funct7 carries the field number.
-#define VSET(field, v) __asm__ volatile(".insn r 0x2B, 0, " #field ", x0, %0, x0" :: "r"(v))
 void kc_trace(const kc_ray *r, int32_t max_steps, kc_hit *h) {
-    VSET(0, r->f[0]); VSET(1, r->f[1]); VSET(2, r->f[2]); VSET(3, r->f[3]);
-    VSET(4, r->f[4]); VSET(5, r->f[5]); VSET(6, r->f[6]); VSET(7, r->f[7]);
-    uint32_t res, cell, t;
-    __asm__ volatile(".insn r 0x2B, 1, 0, %0, %1, x0" : "=r"(res) : "r"(max_steps) : "memory");
-    __asm__ volatile(".insn r 0x2B, 2, 0, %0, x0, x0" : "=r"(cell));
-    __asm__ volatile(".insn r 0x2B, 2, 1, %0, x0, x0" : "=r"(t));
-    h->res = res & 0xFFFFu; h->cell = cell; h->t = (q16)t;
+    KC_VSET(0, r->f[0]); KC_VSET(1, r->f[1]); KC_VSET(2, r->f[2]); KC_VSET(3, r->f[3]);
+    KC_VSET(4, r->f[4]); KC_VSET(5, r->f[5]); KC_VSET(6, r->f[6]); KC_VSET(7, r->f[7]);
+    h->res  = kc_vtrace_res(max_steps);
+    h->cell = kc_vget_cell();
+    h->t    = kc_vget_t();
 }
 #else
 void kc_trace(const kc_ray *r, int32_t max_steps, kc_hit *h) { vtrace_ref(r, max_steps, h); }

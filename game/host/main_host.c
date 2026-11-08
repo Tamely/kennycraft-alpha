@@ -85,11 +85,24 @@ static int pose(q16 x, q16 y, q16 z, q16 yaw, q16 pitch) {
     return frames;
 }
 
+// The kernel (incremental directions, shading table, raster block order) must give exactly
+// the pixels of the from-scratch reference kc_shade_pixel.
+static void check_kernel(const char *name) {
+    int32_t w = KC_RP->width, h = KC_RP->height, bad = 0;
+    uint64_t reads = hstats.world_reads;              // keep the reference's reads out of the stats
+    for (int32_t y = 0; y < h; y++)
+        for (int32_t x = 0; x < w; x++)
+            bad += hal_fb_get((uint32_t)(y * FB_STRIDE + x)) != kc_shade_pixel(x, y);
+    hstats.world_reads = reads;
+    if (bad) { fprintf(stderr, "kc_host: %s: %d pixels differ from kc_shade_pixel\n", name, bad); exit(1); }
+}
+
 // Render one frame at a fixed pose without running physics.
 static void shot(const char *name) {
     arena_reset();
     write_camera();
     kc_draw_world();
+    check_kernel(name);
     game_draw_overlay();
     hal_mmio_w(MMIO_FB_SWAP, 1);
     save_frame(name);

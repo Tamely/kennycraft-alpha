@@ -12,7 +12,7 @@
 
 #define BUDGET_WORLD         (WIN_X * WIN_Y * WIN_Z / 2)           // 4 bits per block, 1 copy
 #define BUDGET_TEXTURES      TEX_BYTES                              // 1 byte per texel
-#define BUDGET_PALETTE       (256 * 2)
+#define BUDGET_PALETTE       (256 * 12 / 8)                         // 256 x RGB444 (12-bit VGA), not 16-bit
 #define BUDGET_CHUNKS        (16 * 2 + 16 + 16 * 4 + 2 + 4)        // slot tables + tag key (KC_GEN_BITMAP: +8 KB in data memory)
 #define BUDGET_FB_160        (2 * 160 * 120)
 

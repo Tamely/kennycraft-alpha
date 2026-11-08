@@ -44,4 +44,22 @@ void kc_trace(const kc_ray *r, int32_t max_steps, kc_hit *h);
 // Always the software version (used by tests to compare against VTRACE).
 void vtrace_ref(const kc_ray *r, int32_t max_steps, kc_hit *h);
 
+#if KC_VTRACE
+// Ray unit, custom-1 (0x2B), for callers that keep the ray in registers (the render kernel).
+// VSET: funct7 carries the field number.
+#define KC_VSET(field, v) __asm__ volatile(".insn r 0x2B, 0, " #field ", x0, %0, x0" :: "r"(v))
+// VTRACE rd = {16'b0, result}: the core zero-extends, so no mask is needed.
+static inline uint32_t kc_vtrace_res(int32_t max_steps) {
+    uint32_t res;
+    __asm__ volatile(".insn r 0x2B, 1, 0, %0, %1, x0" : "=r"(res) : "r"(max_steps) : "memory");
+    return res;
+}
+static inline uint32_t kc_vget_cell(void) {
+    uint32_t v; __asm__ volatile(".insn r 0x2B, 2, 0, %0, x0, x0" : "=r"(v)); return v;
+}
+static inline q16 kc_vget_t(void) {
+    uint32_t v; __asm__ volatile(".insn r 0x2B, 2, 1, %0, x0, x0" : "=r"(v)); return (q16)v;
+}
+#endif
+
 #endif
